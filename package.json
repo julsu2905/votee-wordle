@@ -1,0 +1,25 @@
+{
+  "name": "votee-wordle",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/julsu2905/votee-wordle.git",
+  "author": "haoly <69659361+julsu2905@users.noreply.github.com>",
+  "license": "MIT",
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "benchmark": "tsx src/benchmark.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "an-array-of-english-words": "^2.0.0"
+  }
+}
