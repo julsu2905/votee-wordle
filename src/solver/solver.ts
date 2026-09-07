@@ -4,6 +4,8 @@ import { getWordsByLength } from './wordBank';
 
 const DEFAULT_WORD_LENGTH = 5;
 const DEFAULT_MAX_ATTEMPTS = 6;
+const INFO_GAIN_SCORING_THRESHOLD = 500;
+const MAX_INFO_GAIN_PROBES = 700;
 
 type SolverLogger = (message: string) => void;
 
@@ -27,6 +29,7 @@ export type SolveResult = {
   solved: boolean;
   attempts: AttemptResult[];
   finalGuess?: string;
+  message?: string;
 };
 
 type Constraints = {
@@ -139,6 +142,18 @@ const filterCandidates = (candidates: string[], constraints: Constraints): strin
   });
 };
 
+const encodeResultPattern = (guess: string, target: string): string => {
+  return Array.from(guess)
+    .map((letter, index) => {
+      if (target[index] === letter) {
+        return 'c';
+      }
+
+      return target.includes(letter) ? 'p' : 'a';
+    })
+    .join('');
+};
+
 const buildLetterFrequency = (words: string[]): Map<string, number> => {
   const frequency = new Map<string, number>();
 
@@ -158,7 +173,11 @@ const scoreWord = (word: string, frequency: Map<string, number>): number => {
   return Array.from(uniqueLetters).reduce((score, letter) => score + (frequency.get(letter) ?? 0), 0) - duplicatePenalty;
 };
 
-const chooseBestGuess = (words: string[], guessedWords: Set<string>, frequencySource: string[]): string | undefined => {
+const chooseBestFrequencyGuess = (
+  words: string[],
+  guessedWords: Set<string>,
+  frequencySource: string[],
+): string | undefined => {
   const frequency = buildLetterFrequency(frequencySource);
 
   return words
@@ -166,8 +185,137 @@ const chooseBestGuess = (words: string[], guessedWords: Set<string>, frequencySo
     .sort((left, right) => scoreWord(right, frequency) - scoreWord(left, frequency) || left.localeCompare(right))[0];
 };
 
-const chooseNextGuess = (candidates: string[], allWords: string[], guessedWords: Set<string>): string | undefined => {
-  return chooseBestGuess(candidates, guessedWords, candidates) ?? chooseBestGuess(allWords, guessedWords, allWords);
+type InformationScore = {
+  expectedRemaining: number;
+  entropy: number;
+  largestGroupSize: number;
+  groupCount: number;
+};
+
+const getInformationScore = (guess: string, candidates: string[]): InformationScore => {
+  const groups = new Map<string, number>();
+
+  candidates.forEach((candidate) => {
+    const pattern = encodeResultPattern(guess, candidate);
+    groups.set(pattern, (groups.get(pattern) ?? 0) + 1);
+  });
+
+  const totalCandidates = candidates.length;
+  const groupSizes = Array.from(groups.values());
+
+  return {
+    expectedRemaining: groupSizes.reduce((sum, size) => sum + (size / totalCandidates) * size, 0),
+    entropy: groupSizes.reduce((sum, size) => {
+      const probability = size / totalCandidates;
+
+      return sum - probability * Math.log2(probability);
+    }, 0),
+    largestGroupSize: Math.max(...groupSizes),
+    groupCount: groups.size,
+  };
+};
+
+const getInformationGainProbes = (candidates: string[], allWords: string[]): string[] => {
+  const frequency = buildLetterFrequency(candidates);
+  const topFrequencyWords = [...allWords]
+    .sort((left, right) => scoreWord(right, frequency) - scoreWord(left, frequency) || left.localeCompare(right))
+    .slice(0, MAX_INFO_GAIN_PROBES);
+
+  return Array.from(new Set([...candidates, ...topFrequencyWords]));
+};
+
+const chooseBestInformationGuess = (
+  candidates: string[],
+  allWords: string[],
+  guessedWords: Set<string>,
+  attemptsRemaining: number,
+): string | undefined => {
+  if (candidates.length <= attemptsRemaining) {
+    return chooseBestFrequencyGuess(candidates, guessedWords, candidates);
+  }
+
+  const probes = getInformationGainProbes(candidates, allWords);
+  const frequency = buildLetterFrequency(candidates);
+  let bestGuess: string | undefined;
+  let bestExpectedRemaining = Number.POSITIVE_INFINITY;
+  let bestEntropy = Number.NEGATIVE_INFINITY;
+  let bestLargestGroupSize = Number.POSITIVE_INFINITY;
+  let bestGroupCount = 0;
+  let bestIsCandidate = false;
+  let bestFrequencyScore = Number.NEGATIVE_INFINITY;
+
+  probes.forEach((word) => {
+    if (guessedWords.has(word)) {
+      return;
+    }
+
+    const { expectedRemaining, entropy, largestGroupSize, groupCount } = getInformationScore(word, candidates);
+    const isCandidate = candidates.includes(word);
+    const frequencyScore = scoreWord(word, frequency);
+    const isBetter =
+      expectedRemaining < bestExpectedRemaining ||
+      (expectedRemaining === bestExpectedRemaining && entropy > bestEntropy) ||
+      (expectedRemaining === bestExpectedRemaining && entropy === bestEntropy && largestGroupSize < bestLargestGroupSize) ||
+      (expectedRemaining === bestExpectedRemaining &&
+        entropy === bestEntropy &&
+        largestGroupSize === bestLargestGroupSize &&
+        groupCount > bestGroupCount) ||
+      (expectedRemaining === bestExpectedRemaining &&
+        entropy === bestEntropy &&
+        largestGroupSize === bestLargestGroupSize &&
+        groupCount === bestGroupCount &&
+        frequencyScore > bestFrequencyScore) ||
+      (expectedRemaining === bestExpectedRemaining &&
+        entropy === bestEntropy &&
+        largestGroupSize === bestLargestGroupSize &&
+        groupCount === bestGroupCount &&
+        frequencyScore === bestFrequencyScore &&
+        isCandidate &&
+        !bestIsCandidate) ||
+      (expectedRemaining === bestExpectedRemaining &&
+        entropy === bestEntropy &&
+        largestGroupSize === bestLargestGroupSize &&
+        groupCount === bestGroupCount &&
+        frequencyScore === bestFrequencyScore &&
+        isCandidate === bestIsCandidate &&
+        (bestGuess === undefined || word.localeCompare(bestGuess) < 0));
+
+    if (isBetter) {
+      bestGuess = word;
+      bestExpectedRemaining = expectedRemaining;
+      bestEntropy = entropy;
+      bestLargestGroupSize = largestGroupSize;
+      bestGroupCount = groupCount;
+      bestIsCandidate = isCandidate;
+      bestFrequencyScore = frequencyScore;
+    }
+  });
+
+  return bestGuess;
+};
+
+const chooseNextGuess = (
+  candidates: string[],
+  allWords: string[],
+  guessedWords: Set<string>,
+  attemptsRemaining: number,
+): string | undefined => {
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  if (candidates.length === 1) {
+    return candidates.find((word) => !guessedWords.has(word));
+  }
+
+  if (candidates.length <= INFO_GAIN_SCORING_THRESHOLD) {
+    return chooseBestInformationGuess(candidates, allWords, guessedWords, attemptsRemaining);
+  }
+
+  return (
+    chooseBestFrequencyGuess(candidates, guessedWords, candidates) ??
+    chooseBestFrequencyGuess(allWords, guessedWords, allWords)
+  );
 };
 
 const resolvePositiveInteger = (value: number | undefined, fallback: number, fieldName: string): number => {
@@ -210,7 +358,7 @@ const solveWordle = async (
   const guessedWords = new Set<string>();
   const attempts: AttemptResult[] = [];
   let candidates = allWords;
-  let nextGuess = chooseNextGuess(candidates, allWords, guessedWords);
+  let nextGuess = chooseNextGuess(candidates, allWords, guessedWords, maxAttempts);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     if (!nextGuess) {
@@ -243,13 +391,25 @@ const solveWordle = async (
       };
     }
 
-    nextGuess = chooseNextGuess(candidates, allWords, guessedWords);
+    if (candidates.length === 0) {
+      const message = 'No candidates remain in the word bank for the current feedback';
+
+      return {
+        solved: false,
+        attempts,
+        finalGuess: nextGuess,
+        message,
+      };
+    }
+
+    nextGuess = chooseNextGuess(candidates, allWords, guessedWords, maxAttempts - attempt);
   }
 
   return {
     solved: false,
     attempts,
     finalGuess: attempts.at(-1)?.guess,
+    message: `Failed to solve within ${maxAttempts} attempts`,
   };
 };
 

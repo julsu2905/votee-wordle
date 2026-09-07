@@ -46,6 +46,18 @@ describe('game runner', () => {
     });
   });
 
+  it('dispatches random mode with a non-default size', async () => {
+    solverMocks.solveRandomWordle.mockResolvedValue(solvedResult);
+
+    await runGame(['--mode', 'random', '--seed', '321', '--size', '6', '--max-attempts', '8']);
+
+    expect(solverMocks.solveRandomWordle).toHaveBeenCalledWith({
+      seed: 321,
+      size: 6,
+      maxAttempts: 8,
+    });
+  });
+
   it('dispatches known-word mode', async () => {
     solverMocks.solveKnownWordle.mockResolvedValue(solvedResult);
 

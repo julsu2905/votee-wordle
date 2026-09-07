@@ -63,7 +63,7 @@ describe('solver smoke scenarios', () => {
 
     expect(result.solved).toBe(true);
     expect(result.finalGuess).toBe('harry');
-    expect(result.attempts).toHaveLength(6);
+    expect(result.attempts.length).toBeLessThanOrEqual(6);
     expect(result.attempts[0].candidatesRemaining).toBeGreaterThan(0);
     expect(apiMocks.guessRandom).toHaveBeenCalledWith({
       guess: 'aeros',
@@ -82,6 +82,39 @@ describe('solver smoke scenarios', () => {
     expect(apiMocks.guessDaily).toHaveBeenCalled();
     expect(apiMocks.guessRandom).not.toHaveBeenCalled();
     expect(apiMocks.guessWord).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { size: 4, target: 'code' },
+    { size: 6, target: 'spouse' },
+  ])('solves random mode with $size-letter words', async ({ size, target }) => {
+    mockRandomTarget(target);
+
+    const result = await solveRandomWordle({ seed: 1, size, maxAttempts: 6 });
+
+    expect(result.solved).toBe(true);
+    expect(result.finalGuess).toBe(target);
+    expect(apiMocks.guessRandom).toHaveBeenLastCalledWith({
+      guess: target,
+      size,
+      seed: 1,
+    });
+  });
+
+  it.each([
+    { size: 4, target: 'code' },
+    { size: 6, target: 'spouse' },
+  ])('solves daily mode with $size-letter words', async ({ size, target }) => {
+    mockDailyTarget(target);
+
+    const result = await solveDailyWordle({ size, maxAttempts: 6 });
+
+    expect(result.solved).toBe(true);
+    expect(result.finalGuess).toBe(target);
+    expect(apiMocks.guessDaily).toHaveBeenLastCalledWith({
+      guess: target,
+      size,
+    });
   });
 
   it('runs known-word mode through the word endpoint', async () => {
@@ -106,10 +139,35 @@ describe('solver smoke scenarios', () => {
     expect(result.finalGuess).toBe('level');
   });
 
+  it.each(['code', 'spouse'])('solves known-word mode for different word sizes: %s', async (target) => {
+    mockKnownWordTarget();
+
+    const result = await solveKnownWordle(target, { maxAttempts: 6 });
+
+    expect(result.solved).toBe(true);
+    expect(result.finalGuess).toBe(target);
+    expect(apiMocks.guessWord).toHaveBeenLastCalledWith({
+      word: target,
+      guess: target,
+    });
+  });
+
   it('rejects a known word that is not in the local word bank', async () => {
     mockKnownWordTarget();
 
     await expect(solveKnownWordle('uidasijdkz')).rejects.toThrow('"uidasijdkz" is not included in the word bank');
     expect(apiMocks.guessWord).not.toHaveBeenCalled();
+  });
+
+  it('stops when feedback removes every word-bank candidate', async () => {
+    mockDailyTarget('bali');
+
+    const result = await solveDailyWordle({ size: 4, maxAttempts: 6 });
+
+    expect(result.solved).toBe(false);
+    expect(result.message).toBe('No candidates remain in the word bank for the current feedback');
+    expect(result.attempts.at(-1)?.candidatesRemaining).toBe(0);
+    expect(apiMocks.guessDaily).toHaveBeenCalledTimes(result.attempts.length);
+    expect(result.attempts.length).toBeLessThanOrEqual(6);
   });
 });

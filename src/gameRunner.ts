@@ -53,6 +53,10 @@ const printSummary = (result: SolveResult): void => {
     return;
   }
 
+  if (result.message) {
+    console.log(result.message);
+  }
+
   console.log(`Failed after ${result.attempts.length} attempts. Last guess: ${result.finalGuess ?? 'none'}`);
 };
 

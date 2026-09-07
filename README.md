@@ -132,7 +132,7 @@ Tracked constraints:
 - `absent`: the letter is excluded when the API feedback proves it is unavailable.
 - duplicate letters: minimum and maximum known letter counts are tracked to avoid over-filtering repeated-letter words.
 
-Next guesses are selected deterministically using a simple letter-frequency score. Words with useful high-frequency unique letters are preferred, and duplicate-heavy guesses are lightly penalized.
+Next guesses are selected deterministically. Large candidate pools use a fast letter-frequency heuristic. Smaller candidate pools use information-gain scoring: each possible guess is scored by how well it partitions the remaining candidates into feedback patterns, preferring guesses with a lower expected remaining candidate count and higher entropy.
 
 ## Known-Word Validation
 
@@ -160,16 +160,16 @@ yarn benchmark
 
 The benchmark currently runs:
 
-- random mode with several seeds
+- random mode with several seeds and word sizes
 - daily mode with several sizes
-- known-word mode with selected words
+- known-word mode with selected words across several sizes
 
 Example summary:
 
 ```txt
-[random] solved 3/3, average attempts=5.00
-[daily] solved 1/3, average attempts=5.00
-[word] solved 3/3, average attempts=5.67
+[random] solved 3/6, average attempts=3.67
+[daily] solved 2/3, average attempts=3.50
+[word] solved 6/6, average attempts=4.00
 ```
 
 Benchmark results depend on the live API and may change as the daily puzzle changes.

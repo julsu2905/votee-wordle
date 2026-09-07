@@ -17,6 +17,7 @@ type BenchmarkResult = {
   finalGuess: string;
   candidatesRemaining: number;
   durationMs: number;
+  message?: string;
   error?: string;
 };
 
@@ -25,8 +26,23 @@ const silentLogger = (): void => undefined;
 const benchmarkCases: BenchmarkCase[] = [
   {
     mode: 'random',
+    name: 'seed 123, size 4',
+    run: () => solveRandomWordle({ seed: 123, size: 4, maxAttempts: 6, logger: silentLogger }),
+  },
+  {
+    mode: 'random',
     name: 'seed 123, size 5',
     run: () => solveRandomWordle({ seed: 123, size: 5, maxAttempts: 6, logger: silentLogger }),
+  },
+  {
+    mode: 'random',
+    name: 'seed 123, size 6',
+    run: () => solveRandomWordle({ seed: 123, size: 6, maxAttempts: 6, logger: silentLogger }),
+  },
+  {
+    mode: 'random',
+    name: 'seed 456, size 4',
+    run: () => solveRandomWordle({ seed: 456, size: 4, maxAttempts: 6, logger: silentLogger }),
   },
   {
     mode: 'random',
@@ -35,8 +51,8 @@ const benchmarkCases: BenchmarkCase[] = [
   },
   {
     mode: 'random',
-    name: 'seed 789, size 5',
-    run: () => solveRandomWordle({ seed: 789, size: 5, maxAttempts: 6, logger: silentLogger }),
+    name: 'seed 456, size 6',
+    run: () => solveRandomWordle({ seed: 456, size: 6, maxAttempts: 6, logger: silentLogger }),
   },
   {
     mode: 'daily',
@@ -55,18 +71,33 @@ const benchmarkCases: BenchmarkCase[] = [
   },
   {
     mode: 'word',
-    name: 'word harry',
+    name: 'word code, size 4',
+    run: () => solveKnownWordle('code', { maxAttempts: 6, logger: silentLogger }),
+  },
+  {
+    mode: 'word',
+    name: 'word harry, size 5',
     run: () => solveKnownWordle('harry', { maxAttempts: 6, logger: silentLogger }),
   },
   {
     mode: 'word',
-    name: 'word array',
+    name: 'word array, size 5',
     run: () => solveKnownWordle('array', { maxAttempts: 6, logger: silentLogger }),
   },
   {
     mode: 'word',
-    name: 'word level',
+    name: 'word level, size 5',
     run: () => solveKnownWordle('level', { maxAttempts: 6, logger: silentLogger }),
+  },
+  {
+    mode: 'word',
+    name: 'word spouse, size 6',
+    run: () => solveKnownWordle('spouse', { maxAttempts: 6, logger: silentLogger }),
+  },
+  {
+    mode: 'word',
+    name: 'word planet, size 6',
+    run: () => solveKnownWordle('planet', { maxAttempts: 6, logger: silentLogger }),
   },
 ];
 
@@ -85,6 +116,7 @@ const runBenchmarkCase = async (benchmarkCase: BenchmarkCase): Promise<Benchmark
       finalGuess: result.finalGuess ?? 'none',
       candidatesRemaining: lastAttempt?.candidatesRemaining ?? 0,
       durationMs: Math.round(performance.now() - startedAt),
+      message: result.message,
     };
   } catch (error: unknown) {
     return {
@@ -103,9 +135,10 @@ const runBenchmarkCase = async (benchmarkCase: BenchmarkCase): Promise<Benchmark
 const printResult = (result: BenchmarkResult): void => {
   const status = result.solved ? 'solved' : 'failed';
   const error = result.error ? ` error="${result.error}"` : '';
+  const message = result.message ? ` message="${result.message}"` : '';
 
   console.log(
-    `[${result.mode}] ${result.name}: ${status}, attempts=${result.attempts}, final=${result.finalGuess}, candidates=${result.candidatesRemaining}, duration=${result.durationMs}ms${error}`,
+    `[${result.mode}] ${result.name}: ${status}, attempts=${result.attempts}, final=${result.finalGuess}, candidates=${result.candidatesRemaining}, duration=${result.durationMs}ms${message}${error}`,
   );
 };
 
